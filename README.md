@@ -51,6 +51,36 @@ python3 main.py
 
 ---
 
+## Testing PawPal+
+
+Run the full test suite with:
+
+```bash
+# activate the virtual environment first
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m pytest tests/test_pawpal.py -v
+```
+
+The suite contains **44 tests** across 8 test classes:
+
+| Class | What it covers |
+|---|---|
+| `TestTaskCompletion` | `mark_completed()` sets flag + timestamp; `reset_completion()` clears both |
+| `TestTaskAddition` | Adding a task to a `Pet` increments task count and sets `pet_id` |
+| `TestSortByTime` | Chronological ordering for scrambled, sorted, single, and empty task sets |
+| `TestFilterByPet` | Scoped retrieval, case-insensitive name match, unknown/empty pet edge cases |
+| `TestFilterByStatus` | Splits pending vs. completed correctly across mixed and uniform sets |
+| `TestRecurrence` | Daily → tomorrow, weekly → +7 days, monthly → no recurrence, attribute inheritance |
+| `TestConflictDetection` | Exact-time, overlapping windows, adjacent (no conflict), cross-pet, completed tasks excluded |
+| `TestScheduleGeneration` | Priority ordering, hour-cap enforcement, validate_schedule |
+| `TestEdgeCases` | Invalid priority/hours raise `ValueError`, duplicate special needs, missing IDs |
+
+**Confidence level: ★★★★☆ (4/5)**
+Core scheduling logic, recurrence, and conflict detection are thoroughly tested.
+The remaining gap is integration-level testing of the Streamlit UI layer, which is not yet covered.
+
+---
+
 ### Suggested workflow
 
 1. Read the scenario carefully and identify requirements and edge cases.
