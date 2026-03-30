@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
-from datetime import datetime, time
+from typing import List, Dict, Optional, Tuple
+from datetime import datetime, time, date, timedelta
+import itertools
 import uuid
 
 
@@ -13,6 +14,8 @@ class Task:
     duration_hours: float = 1.0
     priority: int = 3  # 1=low, 5=high
     frequency: str = "daily"  # daily, weekly, monthly
+    scheduled_time: str = "08:00"  # "HH:MM" format for sorting
+    due_date: Optional[date] = None
     completed: bool = False
     completed_at: Optional[datetime] = None
     pet_id: Optional[str] = None  # Reference to associated pet
@@ -273,3 +276,90 @@ class Scheduler:
         explanation += "This ensures critical tasks are completed first while maximizing the number of tasks that fit in your schedule."
 
         return explanation
+
+    def sort_by_time(self) -> List[Task]:
+        """Return all tasks sorted by their scheduled_time (HH:MM string)."""
+        all_tasks = self.owner.get_all_tasks()
+        return sorted(all_tasks, key=lambda t: t.scheduled_time)
+
+    def filter_by_pet(self, pet_name: str) -> List[Task]:
+        """Return tasks belonging to a specific pet (case-insensitive name match)."""
+        for pet in self.owner.pets:
+            if pet.name.lower() == pet_name.lower():
+                return pet.get_tasks()
+        return []
+
+    def filter_by_status(self, completed: bool) -> List[Task]:
+        """Return all tasks filtered by completion status."""
+        return [t for t in self.owner.get_all_tasks() if t.completed == completed]
+
+    def mark_task_complete(self, task_id: str) -> Optional[Task]:
+        """Mark a task complete and auto-create the next occurrence for recurring tasks.
+
+        Returns the newly created Task if one was generated, otherwise None.
+        """
+        for pet in self.owner.pets:
+            for task in pet.tasks:
+                if task.id == task_id:
+                    task.mark_completed()
+                    if task.frequency == "daily":
+                        next_due = date.today() + timedelta(days=1)
+                    elif task.frequency == "weekly":
+                        next_due = date.today() + timedelta(weeks=1)
+                    else:
+                        return None  # No recurrence for other frequencies
+
+                    next_task = Task(
+                        name=task.name,
+                        description=task.description,
+                        duration_hours=task.duration_hours,
+                        priority=task.priority,
+                        frequency=task.frequency,
+                        scheduled_time=task.scheduled_time,
+                        due_date=next_due,
+                    )
+                    pet.add_task(next_task)
+                    return next_task
+        return None
+
+    def detect_conflicts(self) -> List[Tuple[Task, Task]]:
+        """Detect pairs of incomplete tasks whose time windows overlap.
+
+        Uses itertools.combinations to examine every unique task pair without
+        double-counting. Each task's window is [scheduled_time, scheduled_time
+        + duration_hours). Two windows overlap when one starts before the
+        other ends.
+
+        Returns:
+            List of (Task, Task) tuples where the two tasks conflict.
+        """
+        def to_minutes(hhmm: str) -> int:
+            h, m = hhmm.split(":")
+            return int(h) * 60 + int(m)
+
+        pending = self.filter_by_status(completed=False)
+        return [
+            (a, b)
+            for a, b in itertools.combinations(pending, 2)
+            if to_minutes(a.scheduled_time) < to_minutes(b.scheduled_time) + int(b.duration_hours * 60)
+            and to_minutes(b.scheduled_time) < to_minutes(a.scheduled_time) + int(a.duration_hours * 60)
+        ]
+
+    def get_conflict_warnings(self) -> List[str]:
+        """Return human-readable warning strings for every scheduling conflict.
+
+        Calls detect_conflicts() internally and formats each overlapping pair
+        as a plain warning message. Returns an empty list when there are no
+        conflicts, so callers can safely check ``if warnings`` without risk of
+        an exception.
+
+        Returns:
+            List of warning strings, one per conflicting task pair.
+        """
+        warnings: List[str] = []
+        for a, b in self.detect_conflicts():
+            warnings.append(
+                f"WARNING: '{a.name}' ({a.scheduled_time}, {a.duration_hours}h) "
+                f"conflicts with '{b.name}' ({b.scheduled_time}, {b.duration_hours}h)"
+            )
+        return warnings

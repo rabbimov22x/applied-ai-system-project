@@ -32,6 +32,25 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Smarter Scheduling
+
+Phase 3 adds four algorithmic features to `Scheduler` in `pawpal_system.py`:
+
+| Feature | Method | How it works |
+|---|---|---|
+| **Sort by time** | `sort_by_time()` | Uses `sorted()` with a `lambda` key on each task's `"HH:MM"` string — lexicographic order works correctly for zero-padded times |
+| **Filter tasks** | `filter_by_pet(name)` / `filter_by_status(completed)` | List comprehensions that match on pet name (case-insensitive) or completion flag |
+| **Recurring tasks** | `mark_task_complete(task_id)` | When a `daily` or `weekly` task is completed, `timedelta` calculates the next due date and a new `Task` copy is added automatically |
+| **Conflict detection** | `detect_conflicts()` / `get_conflict_warnings()` | `itertools.combinations` examines every unique task pair; two tasks conflict when their `[start, start + duration)` windows overlap. `get_conflict_warnings()` returns plain warning strings so the app never crashes on a conflict |
+
+Run the demo:
+
+```bash
+python3 main.py
+```
+
+---
+
 ### Suggested workflow
 
 1. Read the scenario carefully and identify requirements and edge cases.

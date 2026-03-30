@@ -51,8 +51,23 @@ Yes, I made several changes during implementation based on the requirements and 
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+The conflict detector checks whether two tasks' time *windows* overlap (using
+start < other_end && other_start < end), rather than only flagging exact
+same-start-time matches.
+
+**Why this tradeoff is reasonable:** A pet owner cares whether two tasks are
+physically impossible to do at the same time, not just whether they share an
+identical start minute. A 90-minute vet visit starting at 10:00 genuinely
+prevents a grooming session starting at 11:00, even though the start times
+differ by a full hour. Checking full windows catches that real scheduling
+impossibility.
+
+**What it gives up:** The window-overlap check requires knowing `duration_hours`
+for every task. If a task has no meaningful duration (e.g., a reminder with
+`duration_hours=0`), the window collapses to a point and zero-duration tasks
+will never be flagged as conflicting with anything. That edge case is
+acceptable for this app because all care tasks (walks, feeding, grooming)
+have a realistic, non-zero duration by design.
 
 ---
 

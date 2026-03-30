@@ -1,108 +1,109 @@
 #!/usr/bin/env python3
 """
-Testing script for PawPal+ system classes.
-This script demonstrates the core functionality by creating pets, tasks, and generating a schedule.
+PawPal+ Phase 3 demo: sorting, filtering, recurring tasks, and conflict detection.
 """
 
 from pawpal_system import Owner, Pet, Task, Scheduler
 
 
+def print_task(task: Task, pet_name: str = "") -> None:
+    label = f" [{pet_name}]" if pet_name else ""
+    status = "DONE" if task.completed else "pending"
+    print(f"  {task.scheduled_time} - {task.name}{label} | {task.duration_hours}h | priority {task.priority} | {status}")
+
+
 def main():
-    print("🐾 PawPal+ System Test")
+    print("PawPal+ Phase 3: Algorithms Demo")
     print("=" * 50)
 
-    # Create an owner
+    # --- Setup ---
     owner = Owner(name="Alex Johnson", available_hours_per_day=6.0)
-    print(f"Created owner: {owner.name} (available: {owner.available_hours_per_day} hours/day)")
 
-    # Create pets
     dog = Pet(name="Buddy", age=3, breed="Golden Retriever")
-    dog.add_special_need("Needs daily walks")
-    dog.add_special_need("Allergic to chicken")
-
     cat = Pet(name="Whiskers", age=2, breed="Siamese")
-    cat.add_special_need("Needs litter box cleaning")
-
-    # Add pets to owner
     owner.add_pet(dog)
     owner.add_pet(cat)
 
-    print(f"Added pets: {dog.name} ({dog.breed}) and {cat.name} ({cat.breed})")
+    # Tasks added OUT OF ORDER (intentionally scrambled times)
+    dog.add_task(Task(name="Evening Walk",     scheduled_time="18:00", duration_hours=0.5,  priority=4, frequency="daily"))
+    dog.add_task(Task(name="Morning Walk",     scheduled_time="07:30", duration_hours=0.5,  priority=5, frequency="daily"))
+    dog.add_task(Task(name="Breakfast",        scheduled_time="08:00", duration_hours=0.25, priority=4, frequency="daily"))
+    cat.add_task(Task(name="Litter Box",       scheduled_time="09:00", duration_hours=0.5,  priority=4, frequency="daily"))
+    cat.add_task(Task(name="Vet Checkup",      scheduled_time="10:00", duration_hours=1.5,  priority=5, frequency="weekly"))
+    # Duration conflict: Vet Checkup runs 10:00-11:30, Grooming starts at 11:00
+    cat.add_task(Task(name="Grooming Session", scheduled_time="11:00", duration_hours=1.0,  priority=3, frequency="weekly"))
+    # Exact same-time conflict: both dog and cat have a task at 09:00
+    dog.add_task(Task(name="Medication",       scheduled_time="09:00", duration_hours=0.25, priority=5, frequency="daily"))
 
-    # Create tasks for the dog
-    dog_walk = Task(
-        name="Morning Walk",
-        description="30-minute walk in the park",
-        duration_hours=0.5,
-        priority=5,  # High priority
-        frequency="daily"
-    )
-
-    dog_feeding = Task(
-        name="Breakfast",
-        description="Morning meal with kibble",
-        duration_hours=0.25,
-        priority=4,
-        frequency="daily"
-    )
-
-    # Create tasks for the cat
-    cat_litter = Task(
-        name="Litter Box",
-        description="Clean and refresh litter box",
-        duration_hours=0.5,
-        priority=4,
-        frequency="daily"
-    )
-
-    # Add tasks to pets
-    dog.add_task(dog_walk)
-    dog.add_task(dog_feeding)
-    cat.add_task(cat_litter)
-
-    print(f"Added tasks:")
-    print(f"  - {dog_walk.name} for {dog.name} ({dog_walk.duration_hours}h, priority {dog_walk.priority})")
-    print(f"  - {dog_feeding.name} for {dog.name} ({dog_feeding.duration_hours}h, priority {dog_feeding.priority})")
-    print(f"  - {cat_litter.name} for {cat.name} ({cat_litter.duration_hours}h, priority {cat_litter.priority})")
-
-    # Create scheduler and generate schedule
     scheduler = Scheduler(owner)
-    schedule = scheduler.generate_schedule()
 
-    print("\n📅 Today's Schedule")
-    print("=" * 50)
+    # ------------------------------------------------------------------ #
+    # Step 2a: Sort all tasks by scheduled_time
+    # ------------------------------------------------------------------ #
+    print("\n[Sort by Time]")
+    for task in scheduler.sort_by_time():
+        pet_name = next((p.name for p in owner.pets if p.id == task.pet_id), "?")
+        print_task(task, pet_name)
 
-    if schedule:
-        print(f"Scheduled {len(schedule)} tasks within {owner.available_hours_per_day} available hours:")
-        print()
+    # ------------------------------------------------------------------ #
+    # Step 2b: Filter by pet
+    # ------------------------------------------------------------------ #
+    print("\n[Filter: Buddy's tasks]")
+    for task in scheduler.filter_by_pet("Buddy"):
+        print_task(task)
 
-        for scheduled_task in schedule:
-            task = scheduled_task.task
-            pet_name = "Unknown"
-            # Find which pet this task belongs to
-            for pet in owner.pets:
-                if pet.id == task.pet_id:
-                    pet_name = pet.name
-                    break
+    print("\n[Filter: Whiskers's tasks]")
+    for task in scheduler.filter_by_pet("Whiskers"):
+        print_task(task)
 
-            print(f"🕐 {scheduled_task.scheduled_time.strftime('%H:%M')} - {task.name}")
-            print(f"   Pet: {pet_name} | Duration: {task.duration_hours}h | Priority: {task.priority}")
-            print(f"   {task.description}")
-            print()
+    # ------------------------------------------------------------------ #
+    # Step 2c: Filter by completion status
+    # ------------------------------------------------------------------ #
+    print("\n[Filter: pending tasks]")
+    for task in scheduler.filter_by_status(completed=False):
+        print_task(task)
 
-        # Show explanation
-        print("💡 Schedule Explanation:")
-        print(scheduler.get_schedule_explanation())
+    # ------------------------------------------------------------------ #
+    # Step 3: Recurring tasks — auto-create next occurrence on completion
+    # ------------------------------------------------------------------ #
+    print("\n[Recurring Task Demo]")
+    morning_walk = dog.tasks[1]  # Morning Walk
+    print(f"  Completing '{morning_walk.name}' (frequency: {morning_walk.frequency}) ...")
+    next_task = scheduler.mark_task_complete(morning_walk.id)
+    if next_task:
+        print(f"  Auto-created next occurrence: '{next_task.name}' due {next_task.due_date}")
 
-        # Validate schedule
-        is_valid = scheduler.validate_schedule()
-        print(f"\n✅ Schedule validation: {'Valid' if is_valid else 'Invalid'}")
+    breakfast = dog.tasks[2]  # Breakfast
+    print(f"  Completing '{breakfast.name}' (frequency: {breakfast.frequency}) ...")
+    next_task = scheduler.mark_task_complete(breakfast.id)
+    if next_task:
+        print(f"  Auto-created next occurrence: '{next_task.name}' due {next_task.due_date}")
 
+    print("\n[Filter: completed tasks after marking]")
+    for task in scheduler.filter_by_status(completed=True):
+        print_task(task)
+
+    # ------------------------------------------------------------------ #
+    # Step 4: Conflict detection — warning strings, no crash
+    # ------------------------------------------------------------------ #
+    print("\n[Conflict Detection]")
+    warnings = scheduler.get_conflict_warnings()
+    if warnings:
+        for warning in warnings:
+            print(f"  {warning}")
     else:
-        print("No tasks scheduled. All tasks may be completed or no tasks exist.")
+        print("  No scheduling conflicts found.")
 
-    print("\n" + "=" * 50)
-    print("🐾 PawPal+ Test Complete!")
+    # ------------------------------------------------------------------ #
+    # Original priority-based schedule generation
+    # ------------------------------------------------------------------ #
+    print("\n[Generated Daily Schedule]")
+    schedule = scheduler.generate_schedule()
+    for st in schedule:
+        pet_name = next((p.name for p in owner.pets if p.id == st.task.pet_id), "?")
+        print(f"  {st.scheduled_time.strftime('%H:%M')} - {st.task.name} [{pet_name}] ({st.estimated_duration}h)")
+
+    print("\nPawPal+ Phase 3 Complete!")
 
 
 if __name__ == "__main__":
