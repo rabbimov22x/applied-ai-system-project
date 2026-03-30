@@ -272,5 +272,4 @@ class Scheduler:
         explanation += "2. Duration (shortest first)\n\n"
         explanation += "This ensures critical tasks are completed first while maximizing the number of tasks that fit in your schedule."
 
-        return explanation</content>
-<parameter name="filePath">/home/rabbimov22x/Downloads/ai110-module2show-pawpal-starter/pawpal_system.py
+        return explanation
