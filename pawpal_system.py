@@ -1,115 +1,276 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict, Optional
-
-
-@dataclass
-class Pet:
-    """Represents a pet with its basic information and care requirements."""
-    name: str
-    age: int
-    breed: str
-    special_needs: List[str] = None
-    preferences: Dict[str, str] = None
-
-    def __post_init__(self):
-        if self.special_needs is None:
-            self.special_needs = []
-        if self.preferences is None:
-            self.preferences = {}
-
-    def add_special_need(self, need: str) -> None:
-        """Add a special need to the pet."""
-        pass
-
-    def remove_special_need(self, need: str) -> None:
-        """Remove a special need from the pet."""
-        pass
-
-    def get_special_needs(self) -> List[str]:
-        """Get all special needs for the pet."""
-        pass
+from datetime import datetime, time
+import uuid
 
 
 @dataclass
 class Task:
-    """Represents a pet care task with its properties."""
-    name: str
-    task_type: str
-    duration: float
-    priority: int
-    recurring: bool = False
-    notes: str = ""
+    """Represents a single pet care activity."""
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    description: str = ""
+    duration_hours: float = 1.0
+    priority: int = 3  # 1=low, 5=high
+    frequency: str = "daily"  # daily, weekly, monthly
+    completed: bool = False
+    completed_at: Optional[datetime] = None
+    pet_id: Optional[str] = None  # Reference to associated pet
 
     def set_priority(self, level: int) -> None:
-        """Set the priority level of the task."""
-        pass
+        """Set the priority level of the task (1-5)."""
+        if 1 <= level <= 5:
+            self.priority = level
+        else:
+            raise ValueError("Priority must be between 1 and 5")
 
     def get_duration(self) -> float:
-        """Get the duration of the task."""
-        pass
+        """Get the duration of the task in hours."""
+        return self.duration_hours
 
     def get_priority(self) -> int:
         """Get the priority level of the task."""
-        pass
+        return self.priority
 
     def is_urgent(self) -> bool:
-        """Check if the task is urgent (high priority)."""
-        pass
+        """Check if the task is urgent (priority 4 or 5)."""
+        return self.priority >= 4
+
+    def mark_completed(self) -> None:
+        """Mark the task as completed."""
+        self.completed = True
+        self.completed_at = datetime.now()
+
+    def reset_completion(self) -> None:
+        """Reset the task completion status."""
+        self.completed = False
+        self.completed_at = None
+
+
+@dataclass
+class Pet:
+    """Stores pet details and manages associated tasks."""
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    age: int = 0
+    breed: str = ""
+    special_needs: List[str] = field(default_factory=list)
+    preferences: Dict[str, str] = field(default_factory=dict)
+    tasks: List[Task] = field(default_factory=list)
+
+    def add_special_need(self, need: str) -> None:
+        """Add a special need to the pet."""
+        if need not in self.special_needs:
+            self.special_needs.append(need)
+
+    def remove_special_need(self, need: str) -> None:
+        """Remove a special need from the pet."""
+        if need in self.special_needs:
+            self.special_needs.remove(need)
+
+    def get_special_needs(self) -> List[str]:
+        """Get all special needs for the pet."""
+        return self.special_needs.copy()
+
+    def add_task(self, task: Task) -> None:
+        """Add a task to this pet."""
+        task.pet_id = self.id
+        self.tasks.append(task)
+
+    def remove_task(self, task_id: str) -> bool:
+        """Remove a task from this pet. Returns True if found and removed."""
+        for i, task in enumerate(self.tasks):
+            if task.id == task_id:
+                self.tasks.pop(i)
+                return True
+        return False
+
+    def get_tasks(self) -> List[Task]:
+        """Get all tasks for this pet."""
+        return self.tasks.copy()
+
+    def get_pending_tasks(self) -> List[Task]:
+        """Get all incomplete tasks for this pet."""
+        return [task for task in self.tasks if not task.completed]
 
 
 class Owner:
-    """Represents a pet owner with their constraints and preferences."""
+    """Manages multiple pets and provides access to all their tasks."""
 
-    def __init__(self, name: str, available_hours: float = 8.0,
+    def __init__(self, name: str, available_hours_per_day: float = 8.0,
                  preferences: Optional[Dict] = None, timezone: str = "UTC"):
         self.name = name
-        self.available_hours = available_hours
+        self.available_hours_per_day = available_hours_per_day
         self.preferences = preferences or {}
         self.timezone = timezone
+        self.pets: List[Pet] = []
 
     def set_available_hours(self, hours: float) -> None:
-        """Set the available hours for pet care."""
-        pass
+        """Set the available hours per day for pet care."""
+        if hours > 0:
+            self.available_hours_per_day = hours
+        else:
+            raise ValueError("Available hours must be positive")
 
     def set_preferences(self, preferences: Dict) -> None:
         """Set owner preferences for scheduling."""
-        pass
+        self.preferences = preferences
 
     def get_available_hours(self) -> float:
-        """Get the available hours for pet care."""
-        pass
+        """Get the available hours per day for pet care."""
+        return self.available_hours_per_day
+
+    def add_pet(self, pet: Pet) -> None:
+        """Add a pet to the owner's care."""
+        self.pets.append(pet)
+
+    def remove_pet(self, pet_id: str) -> bool:
+        """Remove a pet from the owner's care. Returns True if found and removed."""
+        for i, pet in enumerate(self.pets):
+            if pet.id == pet_id:
+                self.pets.pop(i)
+                return True
+        return False
+
+    def get_pets(self) -> List[Pet]:
+        """Get all pets owned by this owner."""
+        return self.pets.copy()
+
+    def get_all_tasks(self) -> List[Task]:
+        """Get all tasks across all pets owned by this owner."""
+        all_tasks = []
+        for pet in self.pets:
+            all_tasks.extend(pet.get_tasks())
+        return all_tasks
+
+    def get_pending_tasks(self) -> List[Task]:
+        """Get all incomplete tasks across all pets."""
+        all_pending = []
+        for pet in self.pets:
+            all_pending.extend(pet.get_pending_tasks())
+        return all_pending
+
+    def get_pet_by_id(self, pet_id: str) -> Optional[Pet]:
+        """Get a specific pet by ID."""
+        for pet in self.pets:
+            if pet.id == pet_id:
+                return pet
+        return None
+
+
+@dataclass
+class ScheduledTask:
+    """Represents a task scheduled at a specific time."""
+    task: Task
+    scheduled_time: time
+    estimated_duration: float
+
+    def __str__(self) -> str:
+        return f"{self.scheduled_time.strftime('%H:%M')} - {self.task.name} ({self.estimated_duration}h)"
 
 
 class Scheduler:
-    """Handles scheduling logic for pet care tasks."""
+    """The 'Brain' that retrieves, organizes, and manages tasks across pets."""
 
-    def __init__(self, owner: Owner, pet: Pet):
+    def __init__(self, owner: Owner):
         self.owner = owner
-        self.pet = pet
-        self.tasks: List[Task] = []
-        self.daily_schedule: List = []  # Will hold scheduled tasks
+        self.daily_schedule: List[ScheduledTask] = []
 
-    def add_task(self, task: Task) -> None:
-        """Add a task to the scheduler."""
-        pass
+    def add_task(self, task: Task, pet_id: Optional[str] = None) -> None:
+        """Add a task to a specific pet or create a new pet if none specified."""
+        if pet_id:
+            pet = self.owner.get_pet_by_id(pet_id)
+            if pet:
+                pet.add_task(task)
+            else:
+                raise ValueError(f"Pet with ID {pet_id} not found")
+        else:
+            # If no pet specified, add to first pet or create a generic one
+            if self.owner.pets:
+                self.owner.pets[0].add_task(task)
+            else:
+                # Create a default pet if none exist
+                default_pet = Pet(name="My Pet", age=1, breed="Unknown")
+                self.owner.add_pet(default_pet)
+                default_pet.add_task(task)
 
-    def remove_task(self, task_id: str) -> None:
-        """Remove a task from the scheduler."""
-        pass
+    def remove_task(self, task_id: str) -> bool:
+        """Remove a task by ID from any pet. Returns True if found and removed."""
+        for pet in self.owner.pets:
+            if pet.remove_task(task_id):
+                return True
+        return False
 
-    def generate_schedule(self) -> List:
+    def generate_schedule(self) -> List[ScheduledTask]:
         """Generate a daily schedule based on tasks and constraints."""
-        pass
+        pending_tasks = self.owner.get_pending_tasks()
+
+        if not pending_tasks:
+            self.daily_schedule = []
+            return self.daily_schedule
+
+        # Sort tasks by priority (highest first) then by duration (shortest first)
+        sorted_tasks = sorted(pending_tasks,
+                            key=lambda t: (-t.priority, t.duration_hours))
+
+        # Simple scheduling: start at 8 AM, schedule tasks sequentially
+        schedule = []
+        current_time = time(8, 0)  # Start at 8:00 AM
+        available_hours = self.owner.available_hours_per_day
+
+        total_scheduled_hours = 0
+
+        for task in sorted_tasks:
+            if total_scheduled_hours + task.duration_hours <= available_hours:
+                scheduled_task = ScheduledTask(
+                    task=task,
+                    scheduled_time=current_time,
+                    estimated_duration=task.duration_hours
+                )
+                schedule.append(scheduled_task)
+
+                # Update time (simplified - doesn't handle hour overflow)
+                hours_to_add = int(task.duration_hours)
+                minutes_to_add = int((task.duration_hours % 1) * 60)
+                new_hour = current_time.hour + hours_to_add
+                new_minute = current_time.minute + minutes_to_add
+
+                if new_minute >= 60:
+                    new_hour += 1
+                    new_minute -= 60
+
+                current_time = time(new_hour, new_minute)
+                total_scheduled_hours += task.duration_hours
+            else:
+                break  # No more time available
+
+        self.daily_schedule = schedule
+        return self.daily_schedule
 
     def validate_schedule(self) -> bool:
         """Validate if the current schedule fits within available time."""
-        pass
+        total_duration = sum(task.estimated_duration for task in self.daily_schedule)
+        return total_duration <= self.owner.available_hours_per_day
 
     def optimize_task_order(self) -> List[Task]:
-        """Optimize the order of tasks based on priorities and constraints."""
-        pass
+        """Return tasks in optimized order (by priority, then duration)."""
+        pending_tasks = self.owner.get_pending_tasks()
+        return sorted(pending_tasks,
+                     key=lambda t: (-t.priority, t.duration_hours))
 
     def get_schedule_explanation(self) -> str:
         """Get an explanation of why the schedule was created this way."""
-        pass</content>
+        if not self.daily_schedule:
+            return "No tasks are currently scheduled. Generate a schedule first."
+
+        total_tasks = len(self.daily_schedule)
+        total_hours = sum(task.estimated_duration for task in self.daily_schedule)
+
+        explanation = f"Scheduled {total_tasks} tasks totaling {total_hours:.1f} hours within your {self.owner.available_hours_per_day} hour daily limit.\n\n"
+        explanation += "Tasks are ordered by:\n"
+        explanation += "1. Priority (highest first)\n"
+        explanation += "2. Duration (shortest first)\n\n"
+        explanation += "This ensures critical tasks are completed first while maximizing the number of tasks that fit in your schedule."
+
+        return explanation</content>
 <parameter name="filePath">/home/rabbimov22x/Downloads/ai110-module2show-pawpal-starter/pawpal_system.py
