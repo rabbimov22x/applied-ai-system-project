@@ -152,3 +152,45 @@ When I asked for conflict detection logic, Copilot generated a version that rais
 
 **What using separate chat sessions taught me:**
 Each session acts like a focused work context. Phase 1 was for architecture, Phase 2 for implementation, Phase 3 for algorithms, Phase 4 for testing. Keeping them separate forced me to make deliberate decisions at each boundary — I had to summarize what I'd built before asking the next session for help, which doubled as a design review. That human checkpoint between phases was more valuable than the AI suggestions themselves.
+
+---
+
+## 6. Responsible AI Reflection
+
+**a. Limitations and biases in the system**
+
+Several real limitations exist in this version of PawPal+:
+
+The scheduling algorithm assigns priority on a scale of 1 to 5, but those numbers are entered by the user. The system has no way to verify that the priorities make sense. A user who consistently marks medication as priority 2 and grooming as priority 5 will get a schedule that objectively neglects their pet's health. The system trusts the user's judgment entirely.
+
+The default time slots the AI agent chooses when no time is specified (morning tasks around 07:30, midday around 12:00, evening around 17:30) are biased toward a conventional daytime schedule. Someone who works overnight shifts, lives in a different timezone, or has a pet with medically required feeding intervals would get defaults that do not fit their life. The system has no way to learn or adapt to a user's actual routine over time.
+
+The conflict detector is purely time-based. It flags two tasks as conflicting only when their time windows overlap. It cannot detect conflicts based on location (two tasks that require being in different places at once), energy (a long walk immediately before a grooming session that requires a calm animal), or dependencies (medication that must be given after feeding). The system treats every task as interchangeable beyond its time slot.
+
+There is also no persistent memory. Every session starts from scratch. The AI agent cannot remember that a pet has a recurring health issue, that a user prefers morning tasks, or that last Tuesday's schedule ran long. Each conversation is treated as if the user is new.
+
+**b. Could this system be misused?**
+
+Yes, in a few ways worth naming.
+
+The system has no minimum care validation. Someone could create a schedule with no feeding tasks, no walks, and no medication, and the system would generate it without any warning. The AI agent would follow instructions to set up a neglectful routine if that is what the user described. A responsible deployment would include guardrails such as warnings when a pet has gone more than a certain number of hours without a feeding task or when medication frequency drops below a medically reasonable threshold.
+
+The app currently has no authentication. If deployed on a public server without access controls, anyone could modify the schedule data. In a shared household, this could mean one person unknowingly overwriting another person's setup.
+
+The Claude API key is read from an environment variable, which is the correct pattern. But if a user hardcodes their key into the source code and pushes it to a public repository, the key is exposed. The setup instructions in this README deliberately show `export ANTHROPIC_API_KEY=...` as a shell command rather than suggesting it be written into any file, specifically to discourage that mistake.
+
+To prevent misuse in a real deployment: add user authentication, implement minimum care warnings based on pet type and age, log all schedule changes with a timestamp and user identifier, and never store the API key anywhere except environment configuration.
+
+**c. What surprised me during reliability testing**
+
+The most surprising outcome was the first run of the reliability evaluator returning 26/29 (90%) when I expected a perfect score. Three failures revealed issues that the 74 pytest unit tests had completely missed.
+
+The logging gap was the most surprising. The `_dispatch()` method only logged errors, not successful calls. This had gone unnoticed during development because the agentic loop has its own logging line after calling `_dispatch()`. When the evaluator called `_dispatch()` directly (as the tests do), that outer log line never ran. The system appeared to log correctly in production use but was silently dropping records in the exact pattern used by the test suite. That gap would have made debugging a production issue much harder.
+
+The recurrence edge case was also unexpected. The test was designed to check that completing a task removes it from conflict detection. What actually happened was correct behavior: completing a daily task immediately creates the next occurrence at the same time slot, which then conflicts with the second task. The system was working as designed. The test was written with the wrong mental model. That distinction (the system is right, the test assumption is wrong) is easy to miss if you only look at a failing test as evidence that the code is broken.
+
+**d. One helpful and one flawed AI suggestion**
+
+**Helpful:** When implementing the conflict detection algorithm, I described the problem (check all unique pairs of tasks for time window overlap) and the AI suggested using `itertools.combinations(pending, 2)` with a list comprehension. This replaced a verbose double-`range` loop with a single readable line that communicates intent clearly. I used it directly because it was both correct and more readable than what I had. It also introduced me to a standard library function I had not thought to reach for.
+
+**Flawed:** When I first asked for conflict detection logic, the AI generated a version that called `raise ValueError("Scheduling conflict detected")` when two tasks overlapped. The intent was defensive programming: fail loudly so the problem is impossible to ignore. The problem is that this crashes the application every time a user has overlapping tasks, which is the exact scenario the feature exists to handle. A user who accidentally schedules a vet visit that runs into a grooming appointment would see the app crash rather than a warning. I had to explicitly redirect the AI: "return a list of warning strings instead of raising an exception." The corrected version became `get_conflict_warnings()`. The AI was optimizing for technical correctness at the expense of user experience, and it took a deliberate human intervention to reframe the goal.

@@ -331,6 +331,28 @@ This system does not persist data between sessions, does not support a real user
 
 ---
 
+## Responsible AI
+
+**Limitations and biases**
+
+The scheduling algorithm trusts user-assigned priorities entirely. A user who marks medication as low priority will get a schedule that deprioritizes their pet's health, and the system has no way to detect or warn about that. The AI agent's default time slots (morning around 07:30, midday around 12:00, evening around 17:30) are biased toward a conventional daytime lifestyle and will produce unhelpful defaults for night-shift workers or owners in different routines. The conflict detector is purely time-based and cannot detect location conflicts, energy conflicts, or task dependencies. There is also no persistent memory, so the agent cannot learn from past sessions or adapt to a user's actual patterns.
+
+**Potential misuse and how to address it**
+
+The system has no minimum care validation. A user could describe a neglectful schedule and the AI agent would build it without warning. A responsible deployment would include guardrails: warnings when no feeding task exists within a 12-hour window, or when a pet's medication frequency drops below a safe threshold. The app also has no authentication. Deployed without access controls, any visitor could modify the schedule. The API key is read from an environment variable (the correct pattern), but a developer who hardcodes it into source code and pushes to a public repository would expose it. Setup instructions in this README deliberately show only the shell export form for this reason.
+
+**What surprised me during reliability testing**
+
+The reliability evaluator's first run returned 26/29 (90%) when a perfect score was expected. Two of the three failures were invisible to the 74 pytest tests. The logging gap (successful tool calls were silently not recorded) only appeared when the evaluator called `_dispatch()` directly, bypassing the outer loop that had its own logging. The recurrence edge case revealed that the system was behaving correctly but the test had been written with a wrong mental model -- completing a daily task immediately creates a new occurrence at the same conflicting time slot, which is correct behavior, not a bug. Both findings would have been missed without a second, independent evaluation method.
+
+**One helpful AI suggestion and one flawed one**
+
+The most useful suggestion in the project came when implementing conflict detection. The AI proposed using `itertools.combinations(pending, 2)` with a list comprehension to replace a verbose double-index loop. It was immediately usable, more readable, and introduced a standard library pattern that better communicated the intent.
+
+The most flawed suggestion also came from the conflict detection phase. The AI generated logic that called `raise ValueError("Scheduling conflict detected")` when two tasks overlapped. This would crash the application every time a user accidentally scheduled two overlapping tasks, which is the exact scenario the feature exists to handle gracefully. I redirected the AI to return a list of warning strings instead. The fix became `get_conflict_warnings()`. The AI was optimizing for correctness (fail loudly) while the right answer for a user-facing app was to fail safely (warn without crashing). Recognizing that difference required overriding the suggestion rather than accepting it.
+
+---
+
 ## Project Structure
 
 ```
