@@ -12,6 +12,37 @@ A smart pet care scheduling assistant built with Python and Streamlit.
 - **Recurring task automation** — marking a `daily` or `weekly` task complete automatically creates the next occurrence with the correct due date (`timedelta`)
 - **Schedule explanation** — the app explains why tasks were ordered the way they were
 - **Hour-cap enforcement** — tasks that would exceed the owner's daily availability are excluded from the generated schedule
+- **🤖 AI Assistant (Agentic Workflow)** — describe your pets and care needs in plain English; the AI agent plans, calls tools, checks its own work, and responds with a complete schedule
+
+## AI Feature: Agentic Workflow
+
+The AI Assistant tab is powered by an **agentic loop** using the Claude API with tool use:
+
+1. You describe your pet care needs in natural language
+2. `PawPalAgent` sends your message to Claude (`claude-sonnet-4-6`) along with 6 tool schemas
+3. Claude decides which tools to call — `create_pet`, `add_task`, `check_conflicts`, `generate_schedule`, etc.
+4. Each tool call maps directly to the existing `Scheduler`/`Owner`/`Pet` logic — the AI orchestrates, it doesn't replace
+5. Results feed back to Claude, which continues until it has a complete answer (`end_turn`)
+6. Every API call, tool invocation, and error is written to `logs/agent.log`
+
+```
+User: "My dog Buddy needs a morning walk, breakfast, and medication daily."
+    → create_pet(Buddy, 3, Golden Retriever)
+    → add_task(Buddy, Morning Walk, 07:30, 0.5h, priority=4, daily)
+    → add_task(Buddy, Breakfast, 08:00, 0.25h, priority=4, daily)
+    → add_task(Buddy, Medication, 08:30, 0.1h, priority=5, daily)
+    → check_conflicts()
+    → generate_schedule()
+    → "Here's Buddy's day: Medication at 8:30, Walk at 7:30..."
+```
+
+### Setup for AI features
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...   # get yours at console.anthropic.com
+source .venv/bin/activate
+streamlit run app.py
+```
 
 ## 📸 Demo
 
@@ -85,7 +116,7 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 python -m pytest tests/test_pawpal.py -v
 ```
 
-The suite contains **44 tests** across 8 test classes:
+The suite contains **74 tests** across 10 test classes (44 scheduler + 30 agent tool tests):
 
 | Class | What it covers |
 |---|---|
@@ -98,6 +129,14 @@ The suite contains **44 tests** across 8 test classes:
 | `TestConflictDetection` | Exact-time, overlapping windows, adjacent (no conflict), cross-pet, completed tasks excluded |
 | `TestScheduleGeneration` | Priority ordering, hour-cap enforcement, validate_schedule |
 | `TestEdgeCases` | Invalid priority/hours raise `ValueError`, duplicate special needs, missing IDs |
+
+| `TestToolCreatePet` | Duplicate detection, case-insensitivity, special needs storage |
+| `TestToolAddTask` | Attribute inheritance, unknown pet, invalid time format, boundary values |
+| `TestToolListPetsAndTasks` | Empty owner, pet keys, task listing |
+| `TestToolCheckConflicts` | Same-time, overlapping windows, adjacent tasks, warning string types |
+| `TestToolGenerateSchedule` | Empty state, priority ordering, hour-cap enforcement |
+| `TestToolMarkTaskDone` | Completion flag, recurrence, unknown pet/task, already-done guard |
+| `TestDispatch` | Unknown tool name, exception → error dict (never crash) |
 
 **Confidence level: ★★★★☆ (4/5)**
 Core scheduling logic, recurrence, and conflict detection are thoroughly tested.

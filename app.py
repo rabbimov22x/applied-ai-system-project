@@ -1,6 +1,10 @@
-"""PawPal+ Streamlit app — Phase 4 final UI."""
+"""PawPal+ Streamlit app — Phase 4 final UI + AI Agent."""
+
+import os
 
 import streamlit as st
+
+from ai_agent import PawPalAgent
 from pawpal_system import Owner, Pet, Task, Scheduler
 
 # ---------------------------------------------------------------------------
@@ -15,6 +19,12 @@ if "owner" not in st.session_state:
     st.session_state.owner = Owner(name="Jordan", available_hours_per_day=8.0)
 if "scheduler" not in st.session_state:
     st.session_state.scheduler = Scheduler(st.session_state.owner)
+if "agent" not in st.session_state:
+    st.session_state.agent = PawPalAgent(
+        st.session_state.owner, st.session_state.scheduler
+    )
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []  # list of {"role": "user"|"assistant", "content": str}
 
 
 def scheduler() -> Scheduler:
@@ -69,8 +79,8 @@ with st.sidebar:
 st.title("🐾 PawPal+")
 st.caption(f"Owner: **{owner().name}** · {owner().available_hours_per_day:.1f} hrs/day available")
 
-tab_pets, tab_tasks, tab_conflicts, tab_schedule = st.tabs(
-    ["🐶 Pets", "📋 Tasks", "⚠️ Conflicts", "📅 Schedule"]
+tab_pets, tab_tasks, tab_conflicts, tab_schedule, tab_ai = st.tabs(
+    ["🐶 Pets", "📋 Tasks", "⚠️ Conflicts", "📅 Schedule", "🤖 AI Assistant"]
 )
 
 
@@ -303,3 +313,75 @@ with tab_schedule:
                     st.success("✅ Schedule fits within your available time.")
                 else:
                     st.warning("⚠️ Total duration exceeds your daily limit.")
+
+
+# ── Tab 5: AI Assistant ───────────────────────────────────────────────────────
+with tab_ai:
+    st.subheader("🤖 AI Assistant")
+    st.caption(
+        "Describe your pets and care needs in plain English. "
+        "The AI will create pets, add tasks, check conflicts, and generate your schedule automatically."
+    )
+
+    # API key guard
+    api_key_set = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    if not api_key_set:
+        st.warning(
+            "**ANTHROPIC_API_KEY not set.** "
+            "Add it to your environment before using the AI Assistant:\n\n"
+            "```bash\nexport ANTHROPIC_API_KEY=sk-ant-...\nstreamlit run app.py\n```"
+        )
+
+    # Starter prompts
+    with st.expander("💡 Try one of these prompts", expanded=not bool(st.session_state.chat_history)):
+        examples = [
+            "I have a 3-year-old Golden Retriever named Buddy. He needs a morning walk, breakfast, and an evening walk every day.",
+            "Add a weekly grooming session for Buddy on Saturday mornings, and daily medication at 8am.",
+            "Check if there are any scheduling conflicts and generate today's schedule.",
+            "Mark Buddy's morning walk as done.",
+        ]
+        for ex in examples:
+            if st.button(ex, key=f"ex_{ex[:20]}"):
+                st.session_state.chat_history.append({"role": "user", "content": ex})
+                if api_key_set:
+                    with st.spinner("Thinking..."):
+                        reply = st.session_state.agent.chat(ex)
+                    st.session_state.chat_history.append({"role": "assistant", "content": reply})
+                else:
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": "⚠️ Set ANTHROPIC_API_KEY to enable the AI assistant.",
+                    })
+                st.rerun()
+
+    # Render conversation history
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Chat input
+    user_input = st.chat_input("Ask PawPal+ anything about your pet care schedule...")
+    if user_input:
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        if api_key_set:
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    reply = st.session_state.agent.chat(user_input)
+                st.markdown(reply)
+        else:
+            reply = "⚠️ Set ANTHROPIC_API_KEY to enable the AI assistant."
+            with st.chat_message("assistant"):
+                st.markdown(reply)
+
+        st.session_state.chat_history.append({"role": "assistant", "content": reply})
+        st.rerun()
+
+    # Reset button
+    if st.session_state.chat_history:
+        if st.button("🗑 Clear conversation"):
+            st.session_state.chat_history = []
+            st.session_state.agent.reset()
+            st.rerun()
