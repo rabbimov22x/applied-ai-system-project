@@ -1,0 +1,6 @@
+2026-04-29 01:41:42,632 [WARNING] Unknown tool requested: totally_fake_tool
+2026-04-29 01:41:42,733 [INFO] TOOL  add_task  args={'pet_name': 'Buddy', 'task_name': 'Walk', 'scheduled_time': 'bad-time', 'duration_hours': 0.5, 'priority': 3, 'frequency': 'daily'}  result={'error': "Invalid scheduled_time 'bad-time'. Use HH:MM format."}
+2026-04-29 01:41:42,800 [INFO] TOOL  create_pet  args={'name': 'LogTest', 'age': 1, 'breed': 'Mixed'}  result={'status': 'created', 'pet': 'LogTest', 'breed': 'Mixed', 'age': 1, 'special_needs': []}
+2026-04-29 01:41:42,834 [INFO] TOOL  create_pet  args={'name': 'LogTest2', 'age': 1, 'breed': 'Mixed'}  result={'status': 'created', 'pet': 'LogTest2', 'breed': 'Mixed', 'age': 1, 'special_needs': []}
+2026-04-29 01:42:34,199 [WARNING] Unknown tool requested: nonexistent_tool
+2026-04-29 01:42:34,234 [INFO] TOOL  add_task  args={'pet_name': 'Buddy', 'task_name': 'Walk', 'scheduled_time': 'not-a-time', 'duration_hours': 0.5, 'priority': 3, 'frequency': 'daily'}  result={'error': "Invalid scheduled_time 'not-a-time'. Use HH:MM format."}

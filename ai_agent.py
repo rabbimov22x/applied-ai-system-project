@@ -279,11 +279,14 @@ class PawPalAgent:
     def _dispatch(self, name: str, inputs: Dict) -> Any:
         handler = getattr(self, f"_tool_{name}", None)
         if handler is None:
+            log.warning("Unknown tool requested: %s", name)
             return {"error": f"Unknown tool: {name}"}
         try:
-            return handler(**inputs)
+            result = handler(**inputs)
+            log.info("TOOL  %s  args=%s  result=%s", name, inputs, str(result)[:200])
+            return result
         except Exception as exc:
-            log.error("Tool '%s' raised: %s", name, exc)
+            log.error("Tool '%s' raised: %s  args=%s", name, exc, inputs)
             return {"error": str(exc)}
 
     # ------------------------------------------------------------------

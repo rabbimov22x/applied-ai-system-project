@@ -1,0 +1,58 @@
+==================================================================
+  PawPal+ Reliability Evaluation Report
+==================================================================
+
+Input Handling  (8/8)
+--------------------------------------------------
+  [PASS]  Create pet returns 'created' status
+  [PASS]  Duplicate pet name blocked
+  [PASS]  Duplicate check is case-insensitive
+  [PASS]  Valid task accepted (HH:MM time format)
+  [PASS]  Invalid time format rejected ('8am')
+  [PASS]  Out-of-range hour rejected ('25:00')
+  [PASS]  Add task to unknown pet returns error
+  [PASS]  Boundary time 23:59 accepted
+
+Core Scheduling Logic  (8/8)
+--------------------------------------------------
+  [PASS]  sort_by_time returns tasks in chronological order
+  [PASS]  filter_by_pet returns only that pet's tasks
+  [PASS]  filter_by_status separates pending from completed
+  [PASS]  Daily recurrence creates task due tomorrow
+  [PASS]  Weekly recurrence creates task due in 7 days
+  [PASS]  Monthly task does not auto-recur
+  [PASS]  Schedule respects owner hour cap
+  [PASS]  Highest-priority task is scheduled first
+
+Conflict Detection  (6/6)
+--------------------------------------------------
+  [PASS]  Same start time flagged as conflict
+  [PASS]  Overlapping windows flagged as conflict
+  [PASS]  Adjacent tasks are NOT flagged as conflict
+  [PASS]  Completed tasks excluded from conflict check
+  [PASS]  Cross-pet conflicts detected
+  [PASS]  Conflict warnings are non-empty strings
+
+Error Handling  (5/5)
+--------------------------------------------------
+  [PASS]  Unknown tool name returns error dict (no exception)
+  [PASS]  mark_task_done with unknown pet returns error dict
+  [PASS]  mark_task_done with unknown task returns error dict
+  [PASS]  Dispatch catches exception and returns error dict
+  [PASS]  generate_schedule with no tasks returns info key (no crash)
+
+Logging  (2/2)
+--------------------------------------------------
+  [PASS]  Agent writes to log file after tool call via _dispatch
+  [PASS]  Log file contains tool name and args
+
+==================================================================
+  OVERALL: 29/29 scenarios passed (100%)
+==================================================================
+
+Category breakdown:
+  Input Handling                    8/8  [########]
+  Core Scheduling Logic             8/8  [########]
+  Conflict Detection                6/6  [######]
+  Error Handling                    5/5  [#####]
+  Logging                           2/2  [##]

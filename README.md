@@ -249,17 +249,65 @@ All data lives in Streamlit session state, which resets on page refresh. This wa
 
 ## Testing Summary
 
-The test suite has 74 tests across two files and they all pass.
+Three independent verification methods were used. All results shown below are from actual runs, not estimates.
+
+### 1. Unit and integration tests (pytest)
+
+```
+74 passed in 1.78s
+```
 
 **`tests/test_pawpal.py` (44 tests)** covers the scheduling engine: task completion and reset, adding tasks to pets, chronological sorting, pet and status filtering, daily and weekly recurrence, window-overlap conflict detection, priority-ordered schedule generation, and input validation edge cases such as invalid priority ranges and duplicate special needs.
 
 **`tests/test_agent.py` (30 tests)** covers every tool handler in `PawPalAgent` without making any Claude API calls. It tests the happy path for each tool and the error paths: unknown pet names, invalid time formats, duplicate pet creation, completing a task that is already done, passing an unknown tool name to the dispatcher, and passing bad input that would normally raise an exception.
 
-**What worked well:** Testing the tool handlers independently of Claude was the right architecture call. It meant the agent's action layer had full coverage before any real API testing happened, and it made debugging much faster because failures pointed directly at tool logic rather than at API responses.
+Run with:
+```bash
+python -m pytest tests/ -v
+```
 
-**What did not get covered:** The Streamlit UI layer has no automated tests. Tab rendering, button click behavior, and session state persistence are verified manually. A future improvement would be adding Playwright or Selenium tests for the critical user flows.
+### 2. Reliability evaluator (scored scenarios)
 
-**What I learned:** Separating concerns (scheduling engine, tool layer, API loop) made testing straightforward. When each layer is only responsible for one thing, tests are small and failures are easy to locate.
+A separate script (`tests/eval_reliability.py`) runs 29 named scenarios across five categories and checks each result against an expected output. This is distinct from pytest -- it measures behavioral correctness at the system level, not just code correctness at the unit level.
+
+```
+python tests/eval_reliability.py
+```
+
+**Results (actual run):**
+
+```
+Category              Passed   Bar
+Input Handling          8/8    [########]
+Core Scheduling Logic   8/8    [########]
+Conflict Detection      6/6    [######]
+Error Handling          5/5    [#####]
+Logging                 2/2    [##]
+
+OVERALL: 29/29 scenarios passed (100%)
+```
+
+During development, the first run produced 26/29 (90%). Two failures revealed a real logging gap: `_dispatch()` only logged errors, not successful tool calls. The third failure exposed a subtle behavior: completing a recurring daily task auto-creates a new occurrence at the same time, so the original conflict reappears. Both were fixed before the final run.
+
+The evaluator saves its full report to `logs/eval_report.txt` on every run.
+
+### 3. Logging and error handling
+
+Every tool call routed through `_dispatch()` is written to `logs/agent.log` with the tool name, arguments, and result. Errors include the exception message. The log is append-only so it accumulates a full history of every agent action.
+
+Sample log entries:
+```
+2026-04-29 [INFO] TOOL  create_pet  args={'name': 'Buddy', 'age': 3, ...}  result={'status': 'created', ...}
+2026-04-29 [INFO] TOOL  check_conflicts  args={}  result={'conflict_count': 1, 'conflicts': ['WARNING: ...']}
+2026-04-29 [WARNING] Unknown tool requested: totally_fake_tool
+2026-04-29 [ERROR] Tool 'add_task' raised: Invalid scheduled_time '8am'  args={...}
+```
+
+Errors are caught and returned as `{"error": "..."}` dicts so the agent can read the error message and self-correct rather than crash.
+
+**What did not get covered:** The Streamlit UI layer has no automated tests. Tab rendering, button click behavior, and session state persistence were verified manually. A future improvement would be adding Playwright or Selenium tests for the critical user flows.
+
+**What I learned:** Running the evaluator before finalizing the code found two real bugs that pytest had not caught -- the logging gap and the recurrence edge case. Behavioral testing at the scenario level and unit testing at the function level complement each other. Neither alone was sufficient.
 
 ---
 
