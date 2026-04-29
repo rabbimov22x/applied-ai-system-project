@@ -4,6 +4,12 @@ A conversational pet care scheduling app powered by an agentic AI workflow. You 
 
 ---
 
+## Video Walkthrough
+
+[Watch the Loom walkthrough](https://www.loom.com/share/23a244a2a6f54441a1cf10493e8a35d5)
+
+---
+
 ## Origin: PawPal+ (Modules 1 through 3)
 
 This project began in Modules 1 through 3 as **PawPal+**, a rule-based pet care scheduling assistant. The original system let a pet owner register pets and tasks, then used a priority-and-duration algorithm to generate a daily care plan within a time budget. It also included conflict detection, recurring task automation, and a full Streamlit UI for managing everything through forms and tables.
