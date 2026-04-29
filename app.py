@@ -19,12 +19,21 @@ if "owner" not in st.session_state:
     st.session_state.owner = Owner(name="Jordan", available_hours_per_day=8.0)
 if "scheduler" not in st.session_state:
     st.session_state.scheduler = Scheduler(st.session_state.owner)
+if "use_rag" not in st.session_state:
+    st.session_state.use_rag = True
+if "specialized" not in st.session_state:
+    st.session_state.specialized = False
 if "agent" not in st.session_state:
     st.session_state.agent = PawPalAgent(
-        st.session_state.owner, st.session_state.scheduler
+        st.session_state.owner,
+        st.session_state.scheduler,
+        use_rag=st.session_state.use_rag,
+        specialized=st.session_state.specialized,
     )
 if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []  # list of {"role": "user"|"assistant", "content": str}
+    st.session_state.chat_history = []  # list of {"role": "user"|"assistant", "content": str, "steps": list}
+if "last_steps" not in st.session_state:
+    st.session_state.last_steps = []
 
 
 def scheduler() -> Scheduler:
@@ -61,6 +70,18 @@ with st.sidebar:
     )
     if available_hours != owner().available_hours_per_day:
         owner().available_hours_per_day = available_hours
+
+    st.divider()
+    st.subheader("AI settings")
+    use_rag = st.toggle("RAG knowledge base", value=st.session_state.use_rag,
+                        help="Retrieve pet care guidelines from the knowledge base before each response.")
+    specialized = st.toggle("Specialization mode", value=st.session_state.specialized,
+                            help="Use few-shot examples that add breed notes and a confidence rating to every response.")
+    if use_rag != st.session_state.use_rag or specialized != st.session_state.specialized:
+        st.session_state.use_rag = use_rag
+        st.session_state.specialized = specialized
+        st.session_state.agent.use_rag = use_rag
+        st.session_state.agent.specialized = specialized
 
     st.divider()
     # Always-visible conflict banner in sidebar
@@ -332,6 +353,15 @@ with tab_ai:
             "```bash\nexport ANTHROPIC_API_KEY=sk-ant-...\nstreamlit run app.py\n```"
         )
 
+    # Active mode indicators
+    mode_parts = []
+    if st.session_state.use_rag:
+        mode_parts.append("RAG on")
+    if st.session_state.specialized:
+        mode_parts.append("Specialization on")
+    if mode_parts:
+        st.caption("Active: " + " · ".join(mode_parts))
+
     # Starter prompts
     with st.expander("💡 Try one of these prompts", expanded=not bool(st.session_state.chat_history)):
         examples = [
@@ -342,15 +372,16 @@ with tab_ai:
         ]
         for ex in examples:
             if st.button(ex, key=f"ex_{ex[:20]}"):
-                st.session_state.chat_history.append({"role": "user", "content": ex})
+                st.session_state.chat_history.append({"role": "user", "content": ex, "steps": []})
                 if api_key_set:
                     with st.spinner("Thinking..."):
-                        reply = st.session_state.agent.chat(ex)
-                    st.session_state.chat_history.append({"role": "assistant", "content": reply})
+                        reply, steps = st.session_state.agent.chat_with_steps(ex)
+                    st.session_state.chat_history.append({"role": "assistant", "content": reply, "steps": steps})
                 else:
                     st.session_state.chat_history.append({
                         "role": "assistant",
                         "content": "⚠️ Set ANTHROPIC_API_KEY to enable the AI assistant.",
+                        "steps": [],
                     })
                 st.rerun()
 
@@ -358,25 +389,65 @@ with tab_ai:
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            steps = msg.get("steps", [])
+            if steps and msg["role"] == "assistant":
+                with st.expander(f"🔍 Agent reasoning ({len(steps)} step(s))", expanded=False):
+                    for s in steps:
+                        stype = s.get("type", "")
+                        if stype == "retrieve":
+                            st.markdown(f"**Step {s['step']} — RAG retrieve** · query: `{s['query']}` · {s['retrieved_count']} doc(s)")
+                            for doc in s.get("docs", []):
+                                st.caption(f"[{doc['category']}] {doc['text'][:120]}...")
+                        elif stype == "api_response":
+                            st.markdown(f"**Step {s['step']} — API response** · stop: `{s.get('stop_reason', '?')}` · {s.get('content_blocks', 0)} block(s)")
+                        elif stype == "tool_call":
+                            import json
+                            st.markdown(f"**Step {s['step']} — Tool call** · `{s['tool']}`")
+                            st.code(json.dumps(s.get("args", {}), indent=2), language="json")
+                        elif stype == "tool_result":
+                            import json
+                            status = "error" if s.get("is_error") else "ok"
+                            st.markdown(f"**Step {s['step']} — Tool result** · `{s['tool']}` · {status}")
+                            st.code(json.dumps(s.get("result", {}), indent=2), language="json")
 
     # Chat input
     user_input = st.chat_input("Ask PawPal+ anything about your pet care schedule...")
     if user_input:
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        st.session_state.chat_history.append({"role": "user", "content": user_input, "steps": []})
         with st.chat_message("user"):
             st.markdown(user_input)
 
         if api_key_set:
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    reply = st.session_state.agent.chat(user_input)
+                    reply, steps = st.session_state.agent.chat_with_steps(user_input)
                 st.markdown(reply)
+                if steps:
+                    with st.expander(f"🔍 Agent reasoning ({len(steps)} step(s))", expanded=False):
+                        for s in steps:
+                            stype = s.get("type", "")
+                            if stype == "retrieve":
+                                st.markdown(f"**Step {s['step']} — RAG retrieve** · query: `{s['query']}` · {s['retrieved_count']} doc(s)")
+                                for doc in s.get("docs", []):
+                                    st.caption(f"[{doc['category']}] {doc['text'][:120]}...")
+                            elif stype == "api_response":
+                                st.markdown(f"**Step {s['step']} — API response** · stop: `{s.get('stop_reason', '?')}` · {s.get('content_blocks', 0)} block(s)")
+                            elif stype == "tool_call":
+                                import json
+                                st.markdown(f"**Step {s['step']} — Tool call** · `{s['tool']}`")
+                                st.code(json.dumps(s.get("args", {}), indent=2), language="json")
+                            elif stype == "tool_result":
+                                import json
+                                status = "error" if s.get("is_error") else "ok"
+                                st.markdown(f"**Step {s['step']} — Tool result** · `{s['tool']}` · {status}")
+                                st.code(json.dumps(s.get("result", {}), indent=2), language="json")
         else:
             reply = "⚠️ Set ANTHROPIC_API_KEY to enable the AI assistant."
+            steps = []
             with st.chat_message("assistant"):
                 st.markdown(reply)
 
-        st.session_state.chat_history.append({"role": "assistant", "content": reply})
+        st.session_state.chat_history.append({"role": "assistant", "content": reply, "steps": steps})
         st.rerun()
 
     # Reset button

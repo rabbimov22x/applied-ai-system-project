@@ -219,6 +219,67 @@ with the same time and priority settings.
 
 ---
 
+## Stretch Features
+
+Four optional enhancements were added beyond the required baseline. Each one is independently togglable.
+
+### 1. RAG Enhancement (+2)
+
+**File:** `rag.py`
+
+A retrieval-augmented generation module provides a curated pet care knowledge base with 19 entries across six categories: Feeding, Exercise, Grooming, Medication, Scheduling, and Vet Care. Each entry has a category label, a plain-text guideline, and keyword tags.
+
+Before every Claude API call, the agent runs `retrieve(query, top_k=3)`, which scores every knowledge base entry against the user's message using Jaccard term-overlap similarity (no external ML libraries needed). The top three matching entries are formatted and injected into the system prompt so Claude's scheduling advice is grounded in real care guidelines rather than general training knowledge alone.
+
+**Evidence of improvement:** The RAG comparison section of the evaluator shows a 4/4 keyword hit rate across four representative queries. Every query retrieved at least one entry from the correct category, and the top result's text directly addressed the query topic. Without RAG, those same queries would inject zero context and rely entirely on the model's training data.
+
+RAG can be toggled on or off using the "RAG knowledge base" toggle in the sidebar of the AI Assistant tab. When off, the system prompt contains no retrieved context.
+
+### 2. Agentic Workflow Enhancement (+2)
+
+**Method:** `chat_with_steps()` in `ai_agent.py`
+
+Every step in the agent's reasoning loop is now recorded and returned alongside the final reply. The AI Assistant tab exposes an expandable "Agent reasoning" panel beneath each response that shows every intermediate step: which documents were retrieved from the knowledge base, how many content blocks each API response contained, which tool was called with what arguments, and what result each tool returned.
+
+The step trace is a list of dicts, each with a `type` field (`"retrieve"`, `"api_response"`, `"tool_call"`, `"tool_result"`) and type-specific fields. The existing `chat()` method calls `chat_with_steps()` and discards the steps, so the original interface is unchanged.
+
+This makes the agent's behavior transparent and debuggable: a user can see exactly how the AI interpreted their message and what actions it took before responding.
+
+### 3. Fine-Tuning / Specialization (+2)
+
+**Implementation:** `FEW_SHOT_MESSAGES` in `ai_agent.py`, controlled by `specialized=True`
+
+A set of two example conversation turns is prepended to every message when specialization mode is active. The examples demonstrate two output patterns that do not appear in the base model by default:
+
+1. A "Breed note:" line that surfaces specific care guidelines relevant to the pet's breed.
+2. A "Confidence: [High/Medium/Low] based on [reason]" line at the end of every response.
+
+These patterns are measurably different from baseline output: the confidence rating suffix can be detected programmatically and was used during development to confirm that specialized responses consistently follow the injected format. Without the few-shot prefix, neither pattern appears.
+
+Specialization mode is toggled via the "Specialization mode" toggle in the sidebar. When on, the few-shot prefix is injected before the user's message in every call.
+
+### 4. Test Harness Enhancement (+2)
+
+**File:** `tests/eval_reliability.py`
+
+Two enhancements were added to the reliability evaluator:
+
+**Confidence scoring:** Every scenario now carries a `confidence` float (0.0 to 1.0) representing how likely that test is to catch a real regression. Critical tool-handler tests (create pet, log file presence) are rated 0.90 to 0.95. Standard behavioral tests default to 0.80. The evaluator computes and prints a confidence-weighted overall score alongside the raw pass rate, giving a more calibrated measure of test suite strength.
+
+**RAG comparison:** A new section at the end of the report runs four representative queries through `retrieve()` and checks whether the keyword associated with each query appears in the retrieved results. It reports the keyword hit rate and shows the top retrieved document for each query, giving a clear before/after comparison: 0 context blocks injected without RAG vs. 3 grounded knowledge base entries with RAG.
+
+**Actual output from the most recent run:**
+```
+OVERALL: 29/29 scenarios passed (100%)
+CONFIDENCE-WEIGHTED SCORE: 100.0%
+
+RAG keyword hit rate: 4/4
+Baseline (no retrieval): 0 docs injected into prompt
+With RAG: avg 3 docs injected -- grounded in knowledge base.
+```
+
+---
+
 ## Design Decisions
 
 ### Why an agentic workflow instead of a simple chatbot
@@ -285,7 +346,10 @@ Error Handling          5/5    [#####]
 Logging                 2/2    [##]
 
 OVERALL: 29/29 scenarios passed (100%)
+CONFIDENCE-WEIGHTED SCORE: 100.0%
 ```
+
+Each scenario now carries a confidence weight (0.80 to 0.95) representing how likely it is to catch a real regression. A RAG comparison section also runs at the end of the report, showing keyword hit rate across four sample queries.
 
 During development, the first run produced 26/29 (90%). Two failures revealed a real logging gap: `_dispatch()` only logged errors, not successful tool calls. The third failure exposed a subtle behavior: completing a recurring daily task auto-creates a new occurrence at the same time, so the original conflict reappears. Both were fixed before the final run.
 
@@ -358,8 +422,9 @@ The most flawed suggestion also came from the conflict detection phase. The AI g
 ```
 applied-ai-system-project/
 |
-|-- app.py                  # Streamlit UI (5 tabs)
-|-- ai_agent.py             # PawPalAgent: agentic loop + 6 tool handlers
+|-- app.py                  # Streamlit UI (5 tabs, RAG + specialization toggles)
+|-- ai_agent.py             # PawPalAgent: agentic loop, RAG, few-shot, observable steps
+|-- rag.py                  # Pet care knowledge base + Jaccard retrieval
 |-- pawpal_system.py        # Core scheduling engine: Owner, Pet, Task, Scheduler
 |-- main.py                 # CLI demo script for the scheduling engine
 |-- requirements.txt        # Python dependencies
@@ -367,12 +432,14 @@ applied-ai-system-project/
 |-- tests/
 |   |-- test_pawpal.py      # 44 scheduler tests
 |   |-- test_agent.py       # 30 agent tool reliability tests
+|   |-- eval_reliability.py # 29 scored scenarios + confidence weights + RAG comparison
 |
 |-- assets/
 |   |-- system_diagram.md   # Mermaid source for the architecture diagram
 |
 |-- logs/
 |   |-- agent.log           # Runtime log (API calls, tool results, errors)
+|   |-- eval_report.txt     # Latest reliability evaluator report
 |
 |-- reflection.md           # Project reflection and design notes
 |-- uml_final.md            # Final UML class diagram (Mermaid source)

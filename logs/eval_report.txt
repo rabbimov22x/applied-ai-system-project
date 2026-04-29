@@ -4,50 +4,51 @@
 
 Input Handling  (8/8)
 --------------------------------------------------
-  [PASS]  Create pet returns 'created' status
-  [PASS]  Duplicate pet name blocked
-  [PASS]  Duplicate check is case-insensitive
-  [PASS]  Valid task accepted (HH:MM time format)
-  [PASS]  Invalid time format rejected ('8am')
-  [PASS]  Out-of-range hour rejected ('25:00')
-  [PASS]  Add task to unknown pet returns error
-  [PASS]  Boundary time 23:59 accepted
+  [PASS]  Create pet returns 'created' status  (confidence: 0.95)
+  [PASS]  Duplicate pet name blocked  (confidence: 0.80)
+  [PASS]  Duplicate check is case-insensitive  (confidence: 0.80)
+  [PASS]  Valid task accepted (HH:MM time format)  (confidence: 0.80)
+  [PASS]  Invalid time format rejected ('8am')  (confidence: 0.80)
+  [PASS]  Out-of-range hour rejected ('25:00')  (confidence: 0.80)
+  [PASS]  Add task to unknown pet returns error  (confidence: 0.80)
+  [PASS]  Boundary time 23:59 accepted  (confidence: 0.80)
 
 Core Scheduling Logic  (8/8)
 --------------------------------------------------
-  [PASS]  sort_by_time returns tasks in chronological order
-  [PASS]  filter_by_pet returns only that pet's tasks
-  [PASS]  filter_by_status separates pending from completed
-  [PASS]  Daily recurrence creates task due tomorrow
-  [PASS]  Weekly recurrence creates task due in 7 days
-  [PASS]  Monthly task does not auto-recur
-  [PASS]  Schedule respects owner hour cap
-  [PASS]  Highest-priority task is scheduled first
+  [PASS]  sort_by_time returns tasks in chronological order  (confidence: 0.80)
+  [PASS]  filter_by_pet returns only that pet's tasks  (confidence: 0.80)
+  [PASS]  filter_by_status separates pending from completed  (confidence: 0.80)
+  [PASS]  Daily recurrence creates task due tomorrow  (confidence: 0.80)
+  [PASS]  Weekly recurrence creates task due in 7 days  (confidence: 0.80)
+  [PASS]  Monthly task does not auto-recur  (confidence: 0.80)
+  [PASS]  Schedule respects owner hour cap  (confidence: 0.80)
+  [PASS]  Highest-priority task is scheduled first  (confidence: 0.80)
 
 Conflict Detection  (6/6)
 --------------------------------------------------
-  [PASS]  Same start time flagged as conflict
-  [PASS]  Overlapping windows flagged as conflict
-  [PASS]  Adjacent tasks are NOT flagged as conflict
-  [PASS]  Completed tasks excluded from conflict check
-  [PASS]  Cross-pet conflicts detected
-  [PASS]  Conflict warnings are non-empty strings
+  [PASS]  Same start time flagged as conflict  (confidence: 0.80)
+  [PASS]  Overlapping windows flagged as conflict  (confidence: 0.80)
+  [PASS]  Adjacent tasks are NOT flagged as conflict  (confidence: 0.80)
+  [PASS]  Completed tasks excluded from conflict check  (confidence: 0.80)
+  [PASS]  Cross-pet conflicts detected  (confidence: 0.80)
+  [PASS]  Conflict warnings are non-empty strings  (confidence: 0.80)
 
 Error Handling  (5/5)
 --------------------------------------------------
-  [PASS]  Unknown tool name returns error dict (no exception)
-  [PASS]  mark_task_done with unknown pet returns error dict
-  [PASS]  mark_task_done with unknown task returns error dict
-  [PASS]  Dispatch catches exception and returns error dict
-  [PASS]  generate_schedule with no tasks returns info key (no crash)
+  [PASS]  Unknown tool name returns error dict (no exception)  (confidence: 0.80)
+  [PASS]  mark_task_done with unknown pet returns error dict  (confidence: 0.80)
+  [PASS]  mark_task_done with unknown task returns error dict  (confidence: 0.80)
+  [PASS]  Dispatch catches exception and returns error dict  (confidence: 0.80)
+  [PASS]  generate_schedule with no tasks returns info key (no crash)  (confidence: 0.80)
 
 Logging  (2/2)
 --------------------------------------------------
-  [PASS]  Agent writes to log file after tool call via _dispatch
-  [PASS]  Log file contains tool name and args
+  [PASS]  Agent writes to log file after tool call via _dispatch  (confidence: 0.90)
+  [PASS]  Log file contains tool name and args  (confidence: 0.90)
 
 ==================================================================
   OVERALL: 29/29 scenarios passed (100%)
+  CONFIDENCE-WEIGHTED SCORE: 100.0%
 ==================================================================
 
 Category breakdown:
@@ -56,3 +57,31 @@ Category breakdown:
   Conflict Detection                6/6  [######]
   Error Handling                    5/5  [#####]
   Logging                           2/2  [##]
+
+==================================================================
+  RAG Comparison: retrieve() vs no retrieval
+==================================================================
+
+  Query : 'golden retriever exercise'
+  Docs  : 3 retrieved | top category: Exercise
+  Top   : Golden Retrievers are high-energy dogs that need at least 1 to 2 hours of vigoro...
+  Check : [MATCH] keyword 'Golden Retriever' in results
+
+  Query : 'cat feeding schedule'
+  Docs  : 3 retrieved | top category: Feeding
+  Top   : Cats are obligate carnivores. Most adult cats do well with 2 meals per day, roug...
+  Check : [MATCH] keyword 'cat' in results
+
+  Query : 'medication reminder daily'
+  Docs  : 3 retrieved | top category: Medication
+  Top   : Medications should be given at consistent times each day to maintain stable bloo...
+  Check : [MATCH] keyword 'medication' in results
+
+  Query : 'senior dog walk'
+  Docs  : 3 retrieved | top category: Exercise
+  Top   : Senior dogs (7 years and older) benefit from shorter, more frequent walks rather...
+  Check : [MATCH] keyword 'senior' in results
+
+  RAG keyword hit rate: 4/4
+  Baseline (no retrieval): 0 docs injected into prompt — Claude relies on training data only.
+  With RAG: avg 3 docs injected — grounded in knowledge base.

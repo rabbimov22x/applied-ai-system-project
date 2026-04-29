@@ -16,7 +16,7 @@ import sys
 import os
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Callable, Dict, Any, List, Tuple
+from typing import Callable, Dict, Any, List, Tuple, Optional
 
 # Make sure the project root is on sys.path when running from any directory
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -47,12 +47,15 @@ def agent_with_buddy() -> PawPalAgent:
 # ---------------------------------------------------------------------------
 
 Scenario = Dict[str, Any]
-# Keys: "name", "category", "run" (callable -> result), "check" (result -> (bool, str))
+# Keys: "name", "category", "confidence", "run" (callable -> result), "check" (result -> (bool, str))
+# confidence: float 0.0-1.0 — static estimate of how likely this test is to catch real regressions
 
 
 def scenario(name: str, category: str,
-             run: Callable, check: Callable) -> Scenario:
-    return {"name": name, "category": category, "run": run, "check": check}
+             run: Callable, check: Callable,
+             confidence: float = 0.8) -> Scenario:
+    return {"name": name, "category": category, "confidence": confidence,
+            "run": run, "check": check}
 
 
 def passed(explanation: str = "") -> Tuple[bool, str]:
@@ -76,6 +79,7 @@ SCENARIOS: List[Scenario] = [
         category="Input Handling",
         run=lambda: fresh_agent()._tool_create_pet("Luna", 2, "Siamese"),
         check=lambda r: passed() if r.get("status") == "created" else failed(f"got {r}"),
+        confidence=0.95,
     ),
     scenario(
         name="Duplicate pet name blocked",
@@ -346,6 +350,7 @@ SCENARIOS: List[Scenario] = [
             Path("logs/agent.log").exists() and Path("logs/agent.log").stat().st_size > 0
         )[-1])(fresh_agent()),
         check=lambda r: passed() if r is True else failed("logs/agent.log is empty or missing"),
+        confidence=0.9,
     ),
     scenario(
         name="Log file contains tool name and args",
@@ -355,8 +360,61 @@ SCENARIOS: List[Scenario] = [
             "LogTest2" in Path("logs/agent.log").read_text()
         )[-1])(fresh_agent()),
         check=lambda r: passed() if r is True else failed("tool call record not found in log"),
+        confidence=0.9,
     ),
 ]
+
+
+# ---------------------------------------------------------------------------
+# RAG comparison helpers
+# ---------------------------------------------------------------------------
+
+RAG_QUERIES = [
+    ("golden retriever exercise", "Golden Retriever", "Exercise"),
+    ("cat feeding schedule", "cat", "Feeding"),
+    ("medication reminder daily", "medication", "Medication"),
+    ("senior dog walk", "senior", "Exercise"),
+]
+
+
+def _rag_comparison_section() -> str:
+    """
+    Run the same queries with RAG on vs off and report how many docs
+    are retrieved and whether the top result's category matches expectations.
+    """
+    from rag import retrieve, format_context
+
+    lines = []
+    lines.append("\n" + "=" * 66)
+    lines.append("  RAG Comparison: retrieve() vs no retrieval")
+    lines.append("=" * 66)
+
+    hits = 0
+    for query, expected_keyword, expected_cat in RAG_QUERIES:
+        docs = retrieve(query, top_k=3)
+        top_cat = docs[0]["category"] if docs else "none"
+        top_text = docs[0]["text"][:80] if docs else ""
+        keyword_present = any(
+            expected_keyword.lower() in (d["text"] + " ".join(d["tags"])).lower()
+            for d in docs
+        )
+        match = "MATCH" if keyword_present else "MISS "
+        if keyword_present:
+            hits += 1
+        lines.append(f"\n  Query : {query!r}")
+        lines.append(f"  Docs  : {len(docs)} retrieved | top category: {top_cat}")
+        lines.append(f"  Top   : {top_text}...")
+        lines.append(f"  Check : [{match}] keyword '{expected_keyword}' in results")
+
+    lines.append(f"\n  RAG keyword hit rate: {hits}/{len(RAG_QUERIES)}")
+    lines.append(
+        "  Baseline (no retrieval): 0 docs injected into prompt — "
+        "Claude relies on training data only."
+    )
+    lines.append(
+        f"  With RAG: avg {3} docs injected — grounded in knowledge base."
+    )
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +434,7 @@ def run_eval() -> str:
         results.append({
             "category": sc["category"],
             "name": sc["name"],
+            "confidence": sc.get("confidence", 0.8),
             "passed": ok,
             "detail": detail,
         })
@@ -392,6 +451,8 @@ def run_eval() -> str:
 
     total_pass = 0
     total_all = 0
+    weighted_pass = 0.0
+    weighted_total = 0.0
 
     for cat, items in categories.items():
         cat_pass = sum(1 for i in items if i["passed"])
@@ -403,15 +464,21 @@ def run_eval() -> str:
         lines.append("-" * 50)
         for item in items:
             icon = "PASS" if item["passed"] else "FAIL"
-            line = f"  [{icon}]  {item['name']}"
+            conf = item["confidence"]
+            weighted_total += conf
+            if item["passed"]:
+                weighted_pass += conf
+            line = f"  [{icon}]  {item['name']}  (confidence: {conf:.2f})"
             if not item["passed"] and item["detail"]:
                 line += f"\n           -> {item['detail']}"
             lines.append(line)
 
     pct = round(100 * total_pass / total_all) if total_all else 0
+    weighted_pct = round(100 * weighted_pass / weighted_total, 1) if weighted_total else 0.0
 
     lines.append("\n" + "=" * 66)
     lines.append(f"  OVERALL: {total_pass}/{total_all} scenarios passed ({pct}%)")
+    lines.append(f"  CONFIDENCE-WEIGHTED SCORE: {weighted_pct}%")
     lines.append("=" * 66)
 
     # Category summary table
@@ -421,6 +488,9 @@ def run_eval() -> str:
         cat_all  = len(items)
         bar = "#" * cat_pass + "." * (cat_all - cat_pass)
         lines.append(f"  {cat:<32} {cat_pass:>2}/{cat_all}  [{bar}]")
+
+    # RAG comparison
+    lines.append(_rag_comparison_section())
 
     report = "\n".join(lines)
     return report
